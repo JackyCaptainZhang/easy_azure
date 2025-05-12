@@ -23,6 +23,8 @@ class _FileEditorScreenState extends State<FileEditorScreen> {
   List<List<String>> _originalCsvData = [];
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, FocusNode> _focusNodes = {};
+  final ScrollController _verticalController = ScrollController();
+  final ScrollController _horizontalController = ScrollController();
 
   @override
   void initState() {
@@ -38,6 +40,8 @@ class _FileEditorScreenState extends State<FileEditorScreen> {
     for (final focusNode in _focusNodes.values) {
       focusNode.dispose();
     }
+    _verticalController.dispose();
+    _horizontalController.dispose();
     super.dispose();
   }
 
@@ -191,78 +195,91 @@ class _FileEditorScreenState extends State<FileEditorScreen> {
                     ),
                   ),
                 )
-              : Column(
-                  children: [
-                    Expanded(
-                      child: _csvData.isEmpty
-                          ? const Center(child: Text('没有数据'))
-                          : Scrollbar(
-                              thumbVisibility: true,
-                              child: InteractiveViewer(
-                                constrained: false,
-                                minScale: 1,
-                                maxScale: 2,
-                                child: DataTable(
-                                  columns: _buildColumns(),
-                                  rows: _buildRows(),
-                                  dividerThickness: 1,
-                                  horizontalMargin: 12,
-                                  columnSpacing: 12,
-                                ),
-                              ),
-                            ),
-                    ),
-                  ],
-                ),
+              : _buildVirtualTable(),
     );
   }
 
-  List<DataColumn> _buildColumns() {
-    if (_csvData.isEmpty) return [];
-    return _csvData[0].map((header) => DataColumn(
-      label: Text(
-        header,
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),
-    )).toList();
-  }
-
-  List<DataRow> _buildRows() {
-    if (_csvData.length <= 1) return [];
-    final rows = <DataRow>[];
-    for (int rowIndex = 1; rowIndex < _csvData.length; rowIndex++) {
-      final row = _csvData[rowIndex];
-      while (row.length < _csvData[0].length) {
-        row.add('');
-      }
-      if (row.length > _csvData[0].length) {
-        row.length = _csvData[0].length;
-      }
-      rows.add(DataRow(
-        cells: List.generate(row.length, (colIndex) {
-          final controller = _getController(rowIndex, colIndex);
-          final focusNode = _getFocusNode(rowIndex, colIndex);
-          return DataCell(
-            TextField(
-              controller: controller,
-              focusNode: focusNode,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-              ),
-              style: const TextStyle(fontSize: 14),
-              onChanged: (newValue) {
-                _csvData[rowIndex][colIndex] = newValue;
-                Future.microtask(() {
-                  _checkForChanges();
-                });
-              },
-            ),
-          );
-        }),
-      ));
+  Widget _buildVirtualTable() {
+    if (_csvData.isEmpty) {
+      return const Center(child: Text('没有数据'));
     }
-    return rows;
+    final headers = _csvData[0];
+    final rowCount = _csvData.length - 1;
+    final double cellWidth = 160;
+    final double tableWidth = (headers.length * cellWidth).clamp(300.0, double.infinity);
+    return Scrollbar(
+      controller: _horizontalController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _horizontalController,
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: tableWidth,
+          child: Column(
+            children: [
+              // 表头
+              Container(
+                color: Theme.of(context).colorScheme.surfaceVariant,
+                child: Row(
+                  children: List.generate(headers.length, (colIndex) {
+                    return Container(
+                      width: cellWidth,
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        headers[colIndex],
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              // 内容区
+              Expanded(
+                child: Scrollbar(
+                  controller: _verticalController,
+                  thumbVisibility: true,
+                  child: ListView.builder(
+                    controller: _verticalController,
+                    itemCount: rowCount,
+                    itemBuilder: (context, rowIndex) {
+                      final row = _csvData[rowIndex + 1];
+                      return Row(
+                        children: List.generate(headers.length, (colIndex) {
+                          final controller = _getController(rowIndex + 1, colIndex);
+                          final focusNode = _getFocusNode(rowIndex + 1, colIndex);
+                          return Container(
+                            width: cellWidth,
+                            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                            alignment: Alignment.centerLeft,
+                            child: TextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                              style: const TextStyle(fontSize: 14),
+                              onChanged: (newValue) {
+                                _csvData[rowIndex + 1][colIndex] = newValue;
+                                Future.microtask(() {
+                                  _checkForChanges();
+                                });
+                              },
+                            ),
+                          );
+                        }),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _checkForChanges() {
