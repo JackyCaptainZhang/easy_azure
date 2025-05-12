@@ -6,6 +6,7 @@ import '../services/azure_storage_service.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
 import 'dart:html' as html;
+import 'file_editor_screen.dart';
 
 class FileListScreen extends StatefulWidget {
   const FileListScreen({super.key});
@@ -141,7 +142,16 @@ class _FileListScreenState extends State<FileListScreen> {
         final file = _files[index];
         return ListTile(
           leading: const Icon(Icons.description),
-          title: Text(file['name']),
+          title: GestureDetector(
+            child: Text(file['name']),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => FileEditorScreen(fileName: file['name']),
+                ),
+              );
+            },
+          ),
           trailing: IconButton(
             icon: const Icon(Icons.download),
             onPressed: () => _downloadFile(file['name'], file['url']),
